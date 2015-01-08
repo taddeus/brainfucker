@@ -8,8 +8,8 @@ arrays. Brainfuck commands are transformed to [LLVM
 IR](http://llvm.org/docs/LangRef.html), which is generated in such a way that
 it is easy to optimize for LLVM's `opt` utility.
 
-The (only) source file `bf.ml` pretty much explains itself, as does the.
-`hello.b` and `rot13.b` can be used for quick testing as demonstrated below.
+The (only) source file `bf.ml` pretty much explains itself. `hello.b` and
+`rot13.b` can be used for quick testing as demonstrated below.
 
 
 Building and usage
