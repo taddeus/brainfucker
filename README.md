@@ -92,7 +92,7 @@ The compiler generates very verbose code:
 
         ...
 
-        ; command: .
+        ; command: . (outputs 'H' after 72 times a '+' command)
         %433 = load i32* %idx
         %434 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %433
         %435 = load i8* %434
@@ -112,19 +112,19 @@ evaluates the whole program at compile time:
     ...
     define void @_start() {
     entry:
-        %0 = tail call i32 @putchar(i8 72)
-        %1 = tail call i32 @putchar(i8 101)
-        %2 = tail call i32 @putchar(i8 108)
-        %3 = tail call i32 @putchar(i8 108)
-        %4 = tail call i32 @putchar(i8 111)
-        %5 = tail call i32 @putchar(i8 32)
-        %6 = tail call i32 @putchar(i8 87)
-        %7 = tail call i32 @putchar(i8 111)
-        %8 = tail call i32 @putchar(i8 114)
-        %9 = tail call i32 @putchar(i8 108)
-        %10 = tail call i32 @putchar(i8 100)
-        %11 = tail call i32 @putchar(i8 33)
-        %12 = tail call i32 @putchar(i8 10)
+        %0 = tail call i32 @putchar(i8 72)    ; H
+        %1 = tail call i32 @putchar(i8 101)   ; e
+        %2 = tail call i32 @putchar(i8 108)   ; l
+        %3 = tail call i32 @putchar(i8 108)   ; l
+        %4 = tail call i32 @putchar(i8 111)   ; o
+        %5 = tail call i32 @putchar(i8 32)    ;
+        %6 = tail call i32 @putchar(i8 87)    ; W
+        %7 = tail call i32 @putchar(i8 111)   ; o
+        %8 = tail call i32 @putchar(i8 114)   ; r
+        %9 = tail call i32 @putchar(i8 108)   ; l
+        %10 = tail call i32 @putchar(i8 100)  ; d
+        %11 = tail call i32 @putchar(i8 33)   ; !
+        %12 = tail call i32 @putchar(i8 10)   ; \n
         tail call void @exit(i32 0)
         ret void
     }
