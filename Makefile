@@ -2,7 +2,7 @@ LD := clang
 LDFLAGS := -nostartfiles
 BFILES := $(patsubst %.b,%,$(wildcard *.b))
 
-.PHONY: clean
+.PHONY: check clean
 .PRECIOUS: $(addsuffix .ll,$(BFILES)) $(addsuffix -opt.ll,$(BFILES))
 
 bf: bf.ml
@@ -23,6 +23,9 @@ bf: bf.ml
 
 %.ll: %.b bf
 	./bf < $< > $@
+
+check: hello-opt
+	./$<
 
 clean:
 	rm -f bf *.cmi *.cmx *.ll *.bc *.o $(BFILES) $(addsuffix -opt,$(BFILES))
