@@ -4,8 +4,12 @@ About
 This is a minimal compiler for the
 [Brainfuck](https://en.wikipedia.org/wiki/Brainfuck) language, written for the
 purpose of practicing OCaml LLVM bindings and seeing how well LLVM optimizes
-arrays. Brainfuck commands are transformed to LLVM IR, which is generated in
-such a way that it is easy to optimize for LLVM's `opt` utility.
+arrays. Brainfuck commands are transformed to [LLVM
+IR](http://llvm.org/docs/LangRef.html), which is generated in such a way that
+it is easy to optimize for LLVM's `opt` utility.
+
+The (only) source file `bf.ml` pretty much explains itself, as does the.
+`hello.b` and `rot13.b` can be used for quick testing as demonstrated below.
 
 
 Building and usage
