@@ -3,7 +3,7 @@ About
 
 This is a minimal compiler for the
 [Brainfuck](https://en.wikipedia.org/wiki/Brainfuck) language, written for the
-purpose of practicing Ocaml LLVM bindings and seeing how well LLVM optimizes
+purpose of practicing OCaml LLVM bindings and seeing how well LLVM optimizes
 arrays. Brainfuck commands are transformed to LLVM IR, which is generated in
 such a way that it is easy to optimize for LLVM's `opt` utility.
 
