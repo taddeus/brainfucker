@@ -49,14 +49,15 @@ let compile memsize program =
 
   let byte_ty = i8_type ctx in
   let byteptr_ty = pointer_type byte_ty in
-  let i1_ty = i1_type ctx in
+  let bool_ty = i1_type ctx in
   let i32_ty = i32_type ctx in
-  let int_ty = i32_ty in
   let void_ty = void_type ctx in
 
-  let putchar = declare_function "putchar" (function_type int_ty [|byte_ty|]) m in
+  let putchar = declare_function "putchar" (function_type i32_ty [|byte_ty|]) m in
   let getchar = declare_function "getchar" (function_type byte_ty [||]) m in
+  let cexit = declare_function "exit" (function_type void_ty [|i32_ty|]) m in
 
+  (* use custom _start symbol rather than main function to reduce complexity *)
   let f = define_function "_start" (function_type void_ty [||]) m in
   let bb_cur = ref (entry_block f) in
   let b = builder_at_end ctx !bb_cur in
@@ -66,13 +67,11 @@ let compile memsize program =
     bb_cur := bb
   in
 
-  let i n = const_int int_ty n in
+  let i n = const_int i32_ty n in
   let i8 n = const_int byte_ty n in
 
-  (*let mem = define_global "mem" (const_null (array_type byte_ty memsize)) m in
-  set_linkage Linkage.Private mem;*)
   let mem = build_alloca (array_type byte_ty memsize) "mem" b in
-  let idx = build_alloca int_ty "idx" b in
+  let idx = build_alloca i32_ty "idx" b in
 
   let gep () = build_in_bounds_gep mem [|i 0; build_load idx "" b|] "" b in
   let load ptr = build_load ptr "" b in
@@ -97,14 +96,14 @@ let compile memsize program =
       let bb_body = insert_block ctx "" bb_end in
       let bb_cond = insert_block ctx "" bb_body in
 
-      ignore (build_br bb_cond b);
+      build_br bb_cond b |> ignore;
       position_at_end bb_cond b;
       let cond = build_icmp Icmp.Eq (load (gep ())) (i8 0) "" b in
-      ignore (build_cond_br cond bb_end bb_body b);
+      build_cond_br cond bb_end bb_body b |> ignore;
 
       set_cur_bb bb_body;
       List.iter compile_command p;
-      ignore (build_br bb_cond b);
+      build_br bb_cond b |> ignore;
 
       set_cur_bb bb_end
   in
@@ -112,20 +111,19 @@ let compile memsize program =
   (* zero-initialize memory (use intrinsic for optimization assumptions) *)
   set_data_layout "e" m;  (* little-endian, needed for optimization *)
   let memset =
-    let arg_types = [|byteptr_ty; byte_ty; i32_ty; i32_ty; i1_ty|] in
+    let arg_types = [|byteptr_ty; byte_ty; i32_ty; i32_ty; bool_ty|] in
     declare_function "llvm.memset.p0i8.i32" (function_type void_ty arg_types) m
   in
   let ptr = build_bitcast mem byteptr_ty "" b in
-  build_call memset [|ptr; i8 0; i memsize; i 0; const_int i1_ty 0|] "" b |> ignore;
+  build_call memset [|ptr; i8 0; i memsize; i 0; const_int bool_ty 0|] "" b |> ignore;
 
   (* set pivot to index 0 and compile program commands *)
   store idx (i 0);
   List.iter compile_command program;
 
   (* exit gracefully *)
-  let cexit = declare_function "exit" (function_type void_ty [|i32_ty|]) m in
-  ignore (build_call cexit [|i 0|] "" b);
-  ignore (build_ret_void b);
+  build_call cexit [|i 0|] "" b |> ignore;
+  build_ret_void b |> ignore;
   m
 
 let () =

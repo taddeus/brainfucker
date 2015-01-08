@@ -1,12 +1,13 @@
 LD := clang
 LDFLAGS := -nostartfiles
-BFILES := $(wildcard *.b)
+BFILES := $(patsubst %.b,%,$(wildcard *.b))
 
 .PHONY: clean
-.PRECIOUS: $(patsubst %.b,%.ll %-opt.ll,$(BFILES))
+.PRECIOUS: $(addsuffix .ll,$(BFILES)) $(addsuffix -opt.ll,$(BFILES))
 
 bf: bf.ml
-	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.5 llvm.cmxa $^
+	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.5 llvm.cmxa $<
+	rm -f $@.cmi $@.cmx $@.o
 
 %: %.o
 	$(LD) -o $@ $< $(LDFLAGS)
@@ -24,4 +25,4 @@ bf: bf.ml
 	./bf < $< > $@
 
 clean:
-	rm -f bf *.cmi *.cmx *.ll *.bc *.o $(patsubst %.b,%,$(BFILES))
+	rm -f bf *.cmi *.cmx *.ll *.bc *.o $(BFILES) $(addsuffix -opt,$(BFILES))
