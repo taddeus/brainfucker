@@ -27,22 +27,6 @@ let read_program ic =
   in
   next [] []
 
-let rec string_of_program program =
-  let string_of_command = function
-    | Incptr  -> ">"
-    | Decptr  -> "<"
-    | Incdata -> "+"
-    | Decdata -> "-"
-    | Output  -> "."
-    | Input   -> ","
-    | Loop p  -> "[" ^ string_of_program p ^ "]"
-  in
-  let rec cat buf = function
-    | [] -> buf
-    | cmd :: tl -> cat (buf ^ string_of_command cmd) tl
-  in
-  cat "" program
-
 let compile memsize program =
   let ctx = global_context () in
   let m = create_module ctx "brainfucker" in
@@ -67,21 +51,22 @@ let compile memsize program =
     bb_cur := bb
   in
 
-  let i n = const_int i32_ty n in
-  let i8 n = const_int byte_ty n in
+  let i w n = const_int (integer_type ctx w) n in
+  let i8 = i 8 in
+  let i32 = i 32 in
 
   let mem = build_alloca (array_type byte_ty memsize) "mem" b in
   let idx = build_alloca i32_ty "idx" b in
 
-  let gep () = build_in_bounds_gep mem [|i 0; build_load idx "" b|] "" b in
   let load ptr = build_load ptr "" b in
   let store ptr value = ignore (build_store value ptr b) in
+  let gep () = build_in_bounds_gep mem [|i32 0; load idx|] "" b in
 
   let rec compile_command = function
     | Incptr ->
-      build_add (load idx) (i 1) "" b |> store idx
+      build_add (load idx) (i32 1) "" b |> store idx
     | Decptr ->
-      build_sub (load idx) (i 1) "" b |> store idx
+      build_sub (load idx) (i32 1) "" b |> store idx
     | Incdata ->
       build_add (load (gep ())) (i8 1) "" b |> store (gep ())
     | Decdata ->
@@ -115,14 +100,14 @@ let compile memsize program =
     declare_function "llvm.memset.p0i8.i32" (function_type void_ty arg_types) m
   in
   let ptr = build_bitcast mem byteptr_ty "" b in
-  build_call memset [|ptr; i8 0; i memsize; i 0; const_int bool_ty 0|] "" b |> ignore;
+  build_call memset [|ptr; i8 0; i32 memsize; i32 0; i 1 0|] "" b |> ignore;
 
   (* set pivot to index 0 and compile program commands *)
-  store idx (i 0);
+  store idx (i32 0);
   List.iter compile_command program;
 
   (* exit gracefully *)
-  build_call cexit [|i 0|] "" b |> ignore;
+  build_call cexit [|i32 0|] "" b |> ignore;
   build_ret_void b |> ignore;
   m
 
