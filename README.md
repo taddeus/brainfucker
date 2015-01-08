@@ -41,7 +41,7 @@ Examining generated LLVM:
 Optimization example
 --------------------
 
-The `text.py` utility genrates single-cell Brainfuck code for a given text:
+The `text.py` utility generates single-cell Brainfuck code for a given text:
 
     $ ./text.py Hello World!
     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.
