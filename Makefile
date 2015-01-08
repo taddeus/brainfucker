@@ -6,20 +6,20 @@ BFILES := $(patsubst %.b,%,$(wildcard *.b))
 .PRECIOUS: $(addsuffix .ll,$(BFILES)) $(addsuffix -opt.ll,$(BFILES))
 
 bf: bf.ml
-	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.5 llvm.cmxa $<
+	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.4 llvm.cmxa $<
 	rm -f $@.cmi $@.cmx $@.o
 
 %: %.o
 	$(LD) -o $@ $< $(LDFLAGS)
 
 %.o: %.ll
-	llc-3.5 -filetype obj -o $@ $<
+	llc -filetype obj -o $@ $<
 
 %.ll: %.bc
-	llvm-dis-3.5 -o $@ $<
+	llvm-dis -o $@ $<
 
 %-opt.ll: %.ll
-	opt-3.5 -O3 -S -o $@ $<
+	opt -O3 -S -o $@ $<
 
 %.ll: %.b bf
 	./bf < $< > $@
