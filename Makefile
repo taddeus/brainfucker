@@ -1,4 +1,4 @@
-LD := clang
+LD := gcc
 LDFLAGS := -nostartfiles
 BFILES := $(patsubst %.b,%,$(wildcard *.b))
 

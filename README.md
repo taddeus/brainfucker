@@ -15,9 +15,10 @@ The (only) source file `bf.ml` pretty much explains itself. `hello.b` and
 Building and usage
 ==================
 
-Building the `bf` compiler (Debian dependencies):
+Building the `bf` compiler (Debian dependencies, replace 3.4 with the version
+of the `llvm` package):
 
-    $ sudo apt-get install ocaml llvm-3.4 libllvm-3.4-ocaml-dev
+    $ sudo apt-get install ocaml llvm libllvm-3.4-ocaml-dev
     $ make
 
 Building a Brainfuck program (plain and optimized):
