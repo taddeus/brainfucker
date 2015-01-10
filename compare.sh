@@ -10,19 +10,18 @@ fi
 mytime () {
     (`which time` -f %e $1 > /dev/null) 2>&1
 }
+
+compile () {
+    echo -n "compiling $1... "
+    t=`mytime "make -s $basename-$1"`
+    echo "took $t seconds"
+}
+
 set -e
 
-echo -n "compiling opt..."
-make -s $basename-opt
-echo done
-
-echo -n "compiling c..."
-make -s $basename-c
-echo done
-
-echo -n "compiling nayuki..."
-make -s $basename-nayuki
-echo done
+compile opt
+compile c
+compile nayuki
 
 echo "opt:    `mytime ./$basename-opt`"
 echo "c:      `mytime ./$basename-c`"

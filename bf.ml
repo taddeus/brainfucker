@@ -183,8 +183,7 @@ let compile_c memsize program =
   "#include <stdio.h>\n" ^
   "#include <stdlib.h>\n" ^
   "void _start() {\n" ^
-  "    unsigned char mem[" ^ string_of_int memsize ^ "] = {};\n" ^
-  "    unsigned char *p = mem;\n" ^
+  "    unsigned char mem[" ^ string_of_int memsize ^ "] = {}, *p = mem;\n" ^
        indent (compile_commands "" program) ^
   "    exit(0);\n" ^
   "}\n"
