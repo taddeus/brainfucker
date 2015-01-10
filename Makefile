@@ -1,16 +1,27 @@
 LD := gcc
+CC := clang
+CFLAGS := -O3
 LDFLAGS := -nostartfiles
+BFFLAGS :=
 BFILES := $(patsubst %.b,%,$(wildcard *.b))
 
 .PHONY: check clean
-.PRECIOUS: $(addsuffix .ll,$(BFILES)) $(addsuffix -opt.ll,$(BFILES))
+.PRECIOUS: $(addsuffix .ll,$(BFILES)) $(addsuffix -opt.ll,$(BFILES)) \
+	$(addsuffix -c.c,$(BFILES)) $(addsuffix -nayuki.c,$(BFILES))
 
 bf: bf.ml
-	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.4 llvm.cmxa $<
+	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.4 llvm.cmxa str.cmxa $<
 	rm -f $@.cmi $@.cmx $@.o
 
+%-nayuki: LDFLAGS=
 %: %.o
 	$(LD) -o $@ $< $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+%-nayuki.c: %.b
+	python bfc.py $< $@
 
 %.o: %.ll
 	llc -filetype obj -o $@ $<
@@ -22,10 +33,16 @@ bf: bf.ml
 	opt -O3 -S -o $@ $<
 
 %.ll: %.b bf
-	./bf < $< > $@
+	./bf $(BFFLAGS) < $< > $@
+
+%-c.c: %.b bf
+	./bf $(BFFLAGS) -c < $< > $@
+
+%.dump: %
+	objdump -d -M intel $< > $@
 
 check: hello-opt
 	./$<
 
 clean:
-	rm -f bf *.cmi *.cmx *.ll *.bc *.o $(BFILES) $(addsuffix -opt,$(BFILES))
+	rm -f bf *.cmi *.cmx *.ll *.bc *.o *.c *-opt *-c *-nayuki $(BFILES) *.dump

@@ -7,3 +7,7 @@ hello
 *.bc
 *.o
 *.swp
+*.c
+*-c
+*-nayuki
+*.dump

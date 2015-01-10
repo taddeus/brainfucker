@@ -6,6 +6,11 @@ and command =
   | Incdata | Decdata
   | Output | Input
   | Loop of program
+  | Addptr of int
+  | Adddata of int
+  | Setptr of int
+  | Setdata of int
+
 
 let read_program ic =
   let rec next cur stack =
@@ -26,6 +31,28 @@ let read_program ic =
       List.rev cur
   in
   next [] []
+
+let rec string_of_program program =
+  let rec cat buf = function
+    | [] -> buf
+    | cmd :: tl -> cat (buf ^ string_of_command cmd) tl
+  in
+  cat "" program
+and string_of_command = function
+  | Incptr  -> ">"
+  | Decptr  -> "<"
+  | Incdata -> "+"
+  | Decdata -> "-"
+  | Output  -> "."
+  | Input   -> ","
+  | Loop p  -> "[" ^ string_of_program p ^ "]"
+
+  | Addptr n when n < 0  -> "(<" ^ string_of_int (-n) ^ ")"
+  | Addptr n             -> "(>" ^ string_of_int n ^ ")"
+  | Adddata n when n < 0 -> "(" ^ string_of_int n ^ ")"
+  | Adddata n            -> "(+" ^ string_of_int n ^ ")"
+  | Setptr n             -> "(<>" ^ string_of_int n ^ ")"
+  | Setdata n            -> "(=" ^ string_of_int n ^ ")"
 
 let compile memsize program =
   let ctx = global_context () in
@@ -91,6 +118,15 @@ let compile memsize program =
       build_br bb_cond b |> ignore;
 
       set_cur_bb bb_end
+    | Addptr n ->
+      build_add (load idx) (i32 n) "" b |> store idx
+    | Adddata n ->
+      build_add (load (gep ())) (i8 n) "" b |> store (gep ())
+    | Setptr n when n >= 0 ->
+      store idx (i32 n)
+    | Setdata n when n >= 0 ->
+      store (gep ()) (i8 n)
+    | cmd -> failwith ("invalid command: " ^ string_of_command cmd)
   in
 
   (* zero-initialize memory (use intrinsic for optimization assumptions) *)
@@ -111,5 +147,75 @@ let compile memsize program =
   build_ret_void b |> ignore;
   m
 
+let compile_to_c memsize program =
+  let indent = Str.global_replace (Str.regexp "^\\(.\\)") "    \\1" in
+  let rec compile_commands buf = function
+    | [] -> buf
+    | cmd :: tl -> compile_commands (buf ^ compile_command cmd ^ "\n") tl
+  and compile_command = function
+    | Incptr    -> "idx++;"
+    | Decptr    -> "idx--;"
+    | Incdata   -> "mem[idx]++;"
+    | Decdata   -> "mem[idx]--;"
+    | Output    -> "putchar(mem[idx]);"
+    | Input     -> "mem[idx] = getchar();"
+    | Loop p    -> "while (mem[idx] != 0) {\n" ^ indent (compile_commands "" p) ^ "}"
+    | Addptr n  -> "idx += " ^ string_of_int n ^ ";"
+    | Adddata n -> "mem[idx] += " ^ string_of_int n ^ ";"
+    | Setptr n  -> "idx = " ^ string_of_int n ^ ";"
+    | Setdata n -> "mem[idx] = " ^ string_of_int n ^ ";"
+  in
+  "#include <stdio.h>\n" ^
+  "#include <stdlib.h>\n" ^
+  "void _start() {\n" ^
+  "    unsigned char mem[" ^ string_of_int memsize ^ "] = {};\n" ^
+  "    unsigned idx = 0;\n" ^
+       indent (compile_commands "" program) ^
+  "    exit(0);\n" ^
+  "}\n"
+
+let rec optimize program =
+  let rec opt = function
+    | Incptr :: tl -> opt (Addptr 1 :: tl)
+    | Decptr :: tl -> opt (Addptr (-1) :: tl)
+    | Incdata :: tl -> opt (Adddata 1 :: tl)
+    | Decdata :: tl -> opt (Adddata (-1) :: tl)
+
+    | Addptr a :: Addptr b :: tl -> opt (Addptr (a + b) :: tl)
+    | Adddata a :: Adddata b :: tl -> opt (Adddata (a + b) :: tl)
+
+    | Loop [Addptr -1] :: tl -> opt (Setptr 0 :: tl)
+    | Loop [Adddata (1 | -1)] :: tl -> opt (Setdata 0 :: tl)
+
+    | (Addptr 0 | Adddata 0) :: tl
+    | (Addptr _ | Setptr _) :: (Setptr _ :: _ as tl)
+    | (Adddata _ | Setdata _) :: (Setdata _ :: _ as tl) -> opt tl
+
+    | Loop p :: tl -> Loop (optimize p) :: opt tl
+    | hd :: tl -> hd :: opt tl
+    | [] -> []
+  in
+  match opt program with
+  | p when p <> program -> optimize p
+  | p -> p
+
+let rec flatten = function
+  | Addptr 1 :: tl     -> Incptr :: flatten tl
+  | Addptr (-1) :: tl  -> Decptr :: flatten tl
+  | Adddata 1 :: tl    -> Incdata :: flatten tl
+  | Adddata (-1) :: tl -> Decdata :: flatten tl
+  | Loop p :: tl -> Loop (flatten p) :: flatten tl
+  | hd :: tl -> hd :: flatten tl
+  | [] -> []
+
 let () =
-  stdin |> read_program |> compile 30000 |> string_of_llmodule |> print_string
+  let args = List.tl (Array.to_list Sys.argv) in
+  stdin |> read_program
+  |> (if List.mem "-o" args then optimize else fun p -> p)
+  |> fun program ->
+    if List.mem "-e" args then
+      program |> flatten |> string_of_program |> print_endline
+    else if List.mem "-c" args then
+      program |> flatten |> compile_to_c 30000 |> print_string
+    else
+      program |> compile 30000 |> string_of_llmodule |> print_string
