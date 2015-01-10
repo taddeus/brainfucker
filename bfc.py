@@ -39,9 +39,9 @@ def main(args):
 
 	# Parse and optimize Brainfuck code
 	commands = parse(incode)
-	#commands = optimize(commands)
-	#commands = optimize(commands)
-	#commands = optimize(commands)
+	commands = optimize(commands)
+	commands = optimize(commands)
+	commands = optimize(commands)
 
 	# Write output
 	tempname = os.path.splitext(os.path.basename(outname))[0]
