@@ -2,7 +2,7 @@ LD := gcc
 CC := clang
 CFLAGS := -O3
 LDFLAGS := -nostartfiles
-BFFLAGS :=
+BFFLAGS := -o
 BFILES := $(patsubst %.b,%,$(wildcard *.b))
 
 .PHONY: check clean
