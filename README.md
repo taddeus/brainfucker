@@ -72,36 +72,37 @@ The compiler generates very verbose code:
     entry:
         ; initialization
         %mem = alloca [30000 x i8]
-        %idx = alloca i32
+        %ptr = alloca i8*
         %0 = bitcast [30000 x i8]* %mem to i8*
         call void @llvm.memset.p0i8.i32(i8* %0, i8 0, i32 30000, i32 0, i1 false)
-        store i32 0, i32* %idx
+        %1 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 0
+        store i8* %1, i8** %ptr
 
         ; command: +
-        %1 = load i32* %idx
-        %2 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %1
-        %3 = load i8* %2
-        %4 = add i8 %3, 1
-        %5 = load i32* %idx
-        %6 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %5
-        store i8 %4, i8* %6
+        %2 = load i8** %ptr
+        %3 = getelementptr inbounds i8* %2, i32 0
+        %4 = load i8* %3
+        %5 = add i8 %4, 1
+        %6 = load i8** %ptr
+        %7 = getelementptr inbounds i8* %6, i32 0
+        store i8 %5, i8* %7
 
         ; command: +
-        %7 = load i32* %idx
-        %8 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %7
-        %9 = load i8* %8
-        %10 = add i8 %9, 1
-        %11 = load i32* %idx
-        %12 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %11
-        store i8 %10, i8* %12
+        %8 = load i8** %ptr
+        %9 = getelementptr inbounds i8* %8, i32 0
+        %10 = load i8* %9
+        %11 = add i8 %10, 1
+        %12 = load i8** %ptr
+        %13 = getelementptr inbounds i8* %12, i32 0
+        store i8 %11, i8* %13
 
         ...
 
         ; command: . (outputs 'H' after 72 times a '+' command)
-        %433 = load i32* %idx
-        %434 = getelementptr inbounds [30000 x i8]* %mem, i32 0, i32 %433
-        %435 = load i8* %434
-        %436 = call i32 @putchar(i8 %435)
+        %434 = load i8** %ptr
+        %435 = getelementptr inbounds i8* %434, i32 0
+        %436 = load i8* %435
+        %437 = call i32 @putchar(i8 %436)
 
         ...
 
