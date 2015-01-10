@@ -64,6 +64,10 @@ let compile memsize program =
   let i32_ty = i32_type ctx in
   let void_ty = void_type ctx in
 
+  let memset =
+    let arg_types = [|byteptr_ty; byte_ty; i32_ty; i32_ty; bool_ty|] in
+    declare_function "llvm.memset.p0i8.i32" (function_type void_ty arg_types) m
+  in
   let putchar = declare_function "putchar" (function_type i32_ty [|byte_ty|]) m in
   let getchar = declare_function "getchar" (function_type byte_ty [||]) m in
   let cexit = declare_function "exit" (function_type void_ty [|i32_ty|]) m in
@@ -83,25 +87,27 @@ let compile memsize program =
   let i32 = i 32 in
 
   let mem = build_alloca (array_type byte_ty memsize) "mem" b in
-  let idx = build_alloca i32_ty "idx" b in
+  let ptr = build_alloca byteptr_ty "ptr" b in
 
-  let load ptr = build_load ptr "" b in
-  let store ptr value = ignore (build_store value ptr b) in
-  let gep () = build_in_bounds_gep mem [|i32 0; load idx|] "" b in
+  set_alignment 2 mem;
+
+  let load p = build_load p "" b in
+  let store p value = ignore (build_store value p b) in
+  let gep n = build_in_bounds_gep (load ptr) [|i32 n|] "" b in
 
   let rec compile_command = function
     | Incptr ->
-      build_add (load idx) (i32 1) "" b |> store idx
+      store ptr (gep 1)
     | Decptr ->
-      build_sub (load idx) (i32 1) "" b |> store idx
+      store ptr (gep (-1))
     | Incdata ->
-      build_add (load (gep ())) (i8 1) "" b |> store (gep ())
+      build_add (load (gep 0)) (i8 1) "" b |> store (gep 0)
     | Decdata ->
-      build_sub (load (gep ())) (i8 1) "" b |> store (gep ())
+      build_sub (load (gep 0)) (i8 1) "" b |> store (gep 0)
     | Output ->
-      build_call putchar [|load (gep ())|] "" b |> ignore
+      build_call putchar [|load (gep 0)|] "" b |> ignore
     | Input ->
-      build_call getchar [||] "" b |> store (gep ())
+      build_call getchar [||] "" b |> store (gep 0)
     | Loop p ->
       let bb_end = append_block ctx "" f in
       move_block_after !bb_cur bb_end;
@@ -110,7 +116,7 @@ let compile memsize program =
 
       build_br bb_cond b |> ignore;
       position_at_end bb_cond b;
-      let cond = build_icmp Icmp.Eq (load (gep ())) (i8 0) "" b in
+      let cond = build_icmp Icmp.Eq (load (gep 0)) (i8 0) "" b in
       build_cond_br cond bb_end bb_body b |> ignore;
 
       set_cur_bb bb_body;
@@ -119,27 +125,23 @@ let compile memsize program =
 
       set_cur_bb bb_end
     | Addptr n ->
-      build_add (load idx) (i32 n) "" b |> store idx
+      store ptr (gep n)
     | Adddata n ->
-      build_add (load (gep ())) (i8 n) "" b |> store (gep ())
-    | Setptr n when n >= 0 ->
-      store idx (i32 n)
-    | Setdata n when n >= 0 ->
-      store (gep ()) (i8 n)
-    | cmd -> failwith ("invalid command: " ^ string_of_command cmd)
+      build_add (load (gep 0)) (i8 n) "" b |> store (gep 0)
+    | Setptr n ->
+      let memptr = build_in_bounds_gep mem [|i32 0; i32 n|] "" b in
+      build_bitcast memptr byteptr_ty "" b |> store ptr
+    | Setdata n ->
+      store (gep 0) (i8 n)
   in
 
   (* zero-initialize memory (use intrinsic for optimization assumptions) *)
   set_data_layout "e" m;  (* little-endian, needed for optimization *)
-  let memset =
-    let arg_types = [|byteptr_ty; byte_ty; i32_ty; i32_ty; bool_ty|] in
-    declare_function "llvm.memset.p0i8.i32" (function_type void_ty arg_types) m
-  in
-  let ptr = build_bitcast mem byteptr_ty "" b in
-  build_call memset [|ptr; i8 0; i32 memsize; i32 0; i 1 0|] "" b |> ignore;
+  let memptr = build_bitcast mem byteptr_ty "" b in
+  build_call memset [|memptr; i8 0; i32 memsize; i32 0; i 1 0|] "" b |> ignore;
 
   (* set pivot to index 0 and compile program commands *)
-  store idx (i32 0);
+  build_in_bounds_gep mem [|i32 0; i32 0|] "" b |> store ptr;
   List.iter compile_command program;
 
   (* exit gracefully *)
@@ -153,23 +155,23 @@ let compile_to_c memsize program =
     | [] -> buf
     | cmd :: tl -> compile_commands (buf ^ compile_command cmd ^ "\n") tl
   and compile_command = function
-    | Incptr    -> "idx++;"
-    | Decptr    -> "idx--;"
-    | Incdata   -> "mem[idx]++;"
-    | Decdata   -> "mem[idx]--;"
-    | Output    -> "putchar(mem[idx]);"
-    | Input     -> "mem[idx] = getchar();"
-    | Loop p    -> "while (mem[idx] != 0) {\n" ^ indent (compile_commands "" p) ^ "}"
-    | Addptr n  -> "idx += " ^ string_of_int n ^ ";"
-    | Adddata n -> "mem[idx] += " ^ string_of_int n ^ ";"
-    | Setptr n  -> "idx = " ^ string_of_int n ^ ";"
-    | Setdata n -> "mem[idx] = " ^ string_of_int n ^ ";"
+    | Incptr    -> "++ptr;"
+    | Decptr    -> "--ptr;"
+    | Incdata   -> "++*ptr;"
+    | Decdata   -> "--*ptr;"
+    | Output    -> "putchar(*ptr);"
+    | Input     -> "*ptr = getchar();"
+    | Loop p    -> "while (*ptr) {\n" ^ indent (compile_commands "" p) ^ "}"
+    | Addptr n  -> "ptr += " ^ string_of_int n ^ ";"
+    | Adddata n -> "*ptr += " ^ string_of_int n ^ ";"
+    | Setptr n  -> "ptr = " ^ string_of_int n ^ ";"
+    | Setdata n -> "*ptr = " ^ string_of_int n ^ ";"
   in
   "#include <stdio.h>\n" ^
   "#include <stdlib.h>\n" ^
   "void _start() {\n" ^
   "    unsigned char mem[" ^ string_of_int memsize ^ "] = {};\n" ^
-  "    unsigned idx = 0;\n" ^
+  "    unsigned char *ptr = mem;\n" ^
        indent (compile_commands "" program) ^
   "    exit(0);\n" ^
   "}\n"
