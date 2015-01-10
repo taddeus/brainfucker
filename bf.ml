@@ -159,22 +159,26 @@ let compile_c memsize program =
   let rec compile_commands buf = function
     | [] -> buf
     | cmd :: tl -> compile_commands (buf ^ compile_command cmd ^ "\n") tl
-  and compile_offset o = function
-    | Shift n     -> "p" ^ add n
-    | Add n       -> ptr o ^ add n
-    | Goto 0      -> "p = mem"
-    | Goto n      -> "p = mem + " ^ string_of_int n
-    | Set n       -> ptr o ^ " = " ^ string_of_int n
-    | Out         -> "putchar(" ^ ptr o ^ ")"
-    | In          -> ptr o ^ " = getchar()"
-    | Mul (x, 1)  -> ptr o ^ " += " ^ ptr (o + x)
-    | Mul (x, -1) -> ptr o ^ " -= " ^ ptr (o + x)
-    | Mul (x, y)  -> ptr o ^ " += " ^ ptr (o + x) ^ " * " ^ string_of_int y
-    | cmd         -> failwith "cannot offset command: " ^ string_of_command cmd
   and compile_command = function
-    | Loop p          -> "while (*p != 0) {\n" ^ indent (compile_commands "" p) ^ "}"
-    | Offset (o, cmd) -> compile_offset o cmd ^ ";"
-    | cmd             -> compile_offset 0 cmd ^ ";"
+    | Loop p ->
+      "while (*p) {\n" ^ indent (compile_commands "" p) ^ "}"
+    | Offset (o, cmd) ->
+      begin
+        match cmd with
+        | Shift n     -> "p" ^ add n
+        | Add n       -> ptr o ^ add n
+        | Goto 0      -> "p = mem"
+        | Goto n      -> "p = mem + " ^ string_of_int n
+        | Set n       -> ptr o ^ " = " ^ string_of_int n
+        | Out         -> "putchar(" ^ ptr o ^ ")"
+        | In          -> ptr o ^ " = getchar()"
+        | Mul (x, 1)  -> ptr o ^ " += " ^ ptr (o + x)
+        | Mul (x, -1) -> ptr o ^ " -= " ^ ptr (o + x)
+        | Mul (x, y)  -> ptr o ^ " += " ^ ptr (o + x) ^ " * " ^ string_of_int y
+        | _           -> failwith "cannot compile: " ^ string_of_command cmd
+      end ^ ";"
+    | cmd ->
+      compile_command (Offset (0, cmd))
   in
   "#include <stdio.h>\n" ^
   "#include <stdlib.h>\n" ^
