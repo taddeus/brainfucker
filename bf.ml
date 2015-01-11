@@ -3,7 +3,6 @@ open Llvm
 type program = command list
 and command =
   | Shift of int
-  | Goto of int
   | Add of int
   | Set of int
   | Out | In
@@ -42,7 +41,6 @@ and string_of_command = function
   | Shift -1           -> "<"
   | Shift n when n < 0 -> "(<" ^ string_of_int (-n) ^ ")"
   | Shift n            -> "(+" ^ string_of_int n ^ ")"
-  | Goto n             -> "(_" ^ string_of_int n ^ ")"
   | Add 1              -> "+"
   | Add -1             -> "-"
   | Add n when n < 0   -> "(-" ^ string_of_int (-n) ^ ")"
@@ -53,7 +51,7 @@ and string_of_command = function
   | In                 -> ","
   | Loop p             -> "[" ^ string_of_program p ^ "]"
   | Offset (o, cmd) ->
-    "(" ^ string_of_int o ^ ":" ^ string_of_command cmd ^ ")"
+    "(" ^ string_of_command cmd ^ "@" ^ string_of_int o ^ ")"
 
 let compile_llvm memsize program =
   let ctx = global_context () in
@@ -97,9 +95,6 @@ let compile_llvm memsize program =
   let rec compile_command = function
     | Shift n ->
       store ptr (gep n)
-    | Goto n ->
-      let memptr = build_in_bounds_gep mem [|i32 0; i32 n|] "" b in
-      build_bitcast memptr byteptr_ty "" b |> store ptr
     | Offset (o, Add n) ->
       build_add (load (gep o)) (i8 n) "" b |> store (gep o)
     | Offset (o, Set n) ->
@@ -161,14 +156,12 @@ let compile_c memsize program =
     | cmd :: tl -> compile_commands (buf ^ compile_command cmd ^ "\n") tl
   and compile_command = function
     | Loop p ->
-      "while (*p) {\n" ^ indent (compile_commands "" p) ^ "}"
+      "while (*p != 0) {\n" ^ indent (compile_commands "" p) ^ "}"
     | Offset (o, cmd) ->
       begin
         match cmd with
         | Shift n     -> "p" ^ add n
         | Add n       -> ptr o ^ add n
-        | Goto 0      -> "p = mem"
-        | Goto n      -> "p = mem + " ^ string_of_int n
         | Set n       -> ptr o ^ " = " ^ string_of_int n
         | Out         -> "putchar(" ^ ptr o ^ ")"
         | In          -> ptr o ^ " = getchar()"
@@ -189,72 +182,76 @@ let compile_c memsize program =
   "}\n"
 
 let optimize program =
-  let opt_loop p =
-    let rec next buf counter_found = function
-      | Add -1 :: tl when not counter_found ->
-        next buf true tl
-      | Offset (o, Add n) :: tl ->
-        next (Offset (o, Mul (-o, n)) :: buf) counter_found tl
-      | [] when counter_found ->
-        List.rev (Offset (0, Set 0) :: buf)
-      | _ ->
-        [Loop p]
-    in
-    next [] false p
-  in
-  let can_offset = function
-    | Add _ | Set _ | Out | In | Mul _ -> true
-    | _ -> false
+  let should_swap i a j b =
+    i > j && begin
+      match a, b with
+      | Mul (xa, _), Mul (xb, _) -> i + xa <> j && j + xb <> i
+      | (Add _ | Set _ | Out | In), Mul (x, _) -> j + x <> i
+      | Mul (x, _), (Add _ | Set _ | Out | In) -> i + x <> j
+      | In, In | Out, Out -> false
+      | (Add _ | Set _ | Out | In), (Add _ | Set _ | Out | In) -> true
+      | _ -> false
+    end
   in
   let rec opt = function
+    (* combine shift/add commands *)
     | Shift a :: Shift b :: tl ->
       Shift (a + b) :: tl |> opt
     | Add a :: Add b :: tl ->
       Add (a + b) :: tl |> opt
-
-    | Set 0 :: Loop _ :: tl ->
-      Set 0 :: tl |> opt
-
-    | Goto a :: Shift b :: tl ->
-      Goto (a + b) :: tl |> opt
     | Set a :: Add b :: tl ->
       Set (a + b) :: tl |> opt
 
+    (* remove dead code *)
+    | Set 0 :: Loop _ :: tl ->
+      Set 0 :: tl |> opt
+
     | (Shift 0 | Add 0) :: tl
-    | (Shift _ | Goto _) :: (Goto _ :: _ as tl)
-    | (Add _ | Set _) :: (Set _ :: _ as tl) ->
+    | (Add _ | Set _ | Mul _) :: (Set _ :: _ as tl) ->
       opt tl
 
-    | Goto o :: cmd :: tl when can_offset cmd ->
-      Offset (o, cmd) :: Goto o :: tl |> opt
-    | Shift o :: cmd :: tl when can_offset cmd ->
+    (* postpone shifts by wrapping commands in offset nodes *)
+    | Shift o :: (Add _ | Set _ | Out | In | Mul _ as cmd) :: tl ->
       Offset (o, cmd) :: Shift o :: tl |> opt
+    | Shift i :: Offset (j, cmd) :: tl ->
+      Offset (i + j, cmd) :: Shift i :: tl |> opt
 
     | Offset (a, Offset (b, cmd)) :: tl ->
       Offset (a + b, cmd) :: tl |> opt
     | Offset (0, cmd) :: tl ->
       cmd :: tl |> opt
 
+    (* combine adjacent commands that work on the same offset *)
     | Offset (i, a) :: Offset (j, b) :: tl when i = j ->
       begin match opt [a; b] with
       | [cmd] -> Offset (i, cmd) :: tl |> opt
       | _ -> Offset (i, a) :: opt (Offset (j, b) :: tl)
       end
 
-    | Shift i :: Offset (j, cmd) :: tl ->
-      Offset (i + j, cmd) :: Shift i :: tl |> opt
+    (* sort offset operations so that they are likely to be combined *)
+    | Offset (i, a) :: Offset (j, b) :: tl when should_swap i a j b ->
+      Offset (j, b) :: Offset (i, a) :: tl |> opt
+    | Offset (i, a) :: b :: tl when should_swap i a 0 b ->
+      b :: Offset (i, a) :: tl |> opt
 
-    | Shift i :: cmd :: tl when can_offset cmd ->
-      Offset (i, cmd) :: Shift i :: tl |> opt
-
+    (* flatten reset loops *)
     | Loop [Add (1 | -1)] :: tl ->
       Set 0 :: tl |> opt
 
+    (* unfold multiplication loops *)
     | Loop p :: tl ->
-      begin match opt_loop (check_change p) with
-      | [Loop _ as loop] -> loop :: opt tl
-      | replacement -> opt (replacement @ tl)
-      end
+      let p = check_change p in
+      let rec next buf counter_found = function
+        | Add -1 :: tl when not counter_found ->
+          next buf true tl
+        | Offset (o, Add n) :: tl ->
+          next (Offset (o, Mul (-o, n)) :: buf) counter_found tl
+        | [] when counter_found ->
+          List.rev (Offset (0, Set 0) :: buf) @ tl |> opt
+        | _ ->
+          Loop p :: opt tl
+      in
+      next [] false p
 
     | hd :: tl -> hd :: opt tl
     | [] -> []
