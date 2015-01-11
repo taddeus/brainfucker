@@ -205,6 +205,8 @@ let optimize program =
     (* remove dead code *)
     | Set 0 :: Loop _ :: tl ->
       Set 0 :: tl |> opt
+    | (Offset (i, Set 0) as off) :: Shift j :: Loop _ :: tl when i = j ->
+      off :: Shift j :: tl |> opt
 
     | (Shift 0 | Add 0) :: tl
     | (Add _ | Set _ | Mul _) :: (Set _ :: _ as tl) ->
