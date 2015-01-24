@@ -10,7 +10,7 @@ BFILES := $(patsubst %.b,%,$(wildcard *.b))
 	$(addsuffix -c.c,$(BFILES)) $(addsuffix -nayuki.c,$(BFILES))
 
 bf: bf.ml
-	ocamlopt -o $@ -g -I /usr/lib/ocaml/llvm-3.4 llvm.cmxa str.cmxa $<
+	ocamlfind ocamlopt -linkpkg -package llvm -package str -o $@ -g $<
 	rm -f $@.cmi $@.cmx $@.o
 
 %-nayuki: LDFLAGS=
