@@ -24,9 +24,9 @@ let read_program ic =
       | ']', [] -> failwith "unmatched ']'"
       | ']', (hd :: tl) -> next (Loop (List.rev cur) :: hd) tl
       | _ -> next cur stack
-    with End_of_file ->
-      if List.length stack > 0 then failwith "unmatched '['";
-      List.rev cur
+    with
+      | End_of_file when List.length stack > 0 -> failwith "unmatched '['"
+      | End_of_file -> List.rev cur
   in
   next [] []
 
