@@ -19,10 +19,12 @@ compile () {
 
 set -e
 
+compile plain
 compile opt
 compile c
 compile nayuki
 
+echo "plain:  `mytime ./$basename-plain`"
 echo "opt:    `mytime ./$basename-opt`"
 echo "c:      `mytime ./$basename-c`"
 echo "nayuki: `mytime ./$basename-nayuki`"

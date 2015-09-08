@@ -1,5 +1,6 @@
 bf
 hello
+*-plain
 *-opt
 *.cmi
 *.cmx
