@@ -1,7 +1,7 @@
 LD := gcc
 CC := clang
 CFLAGS := -O3
-LDFLAGS := -nostartfiles
+LDFLAGS := -nostartfiles -no-pie
 BFFLAGS := -o
 BFILES := $(patsubst %.b,%,$(wildcard *.b))
 
